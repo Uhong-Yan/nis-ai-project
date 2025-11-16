@@ -1,0 +1,272 @@
+<!DOCTYPE html> 
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <title>NIS 使用者聊天</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f5f5f5;
+    }
+    .page {
+      max-width: 800px;
+      margin: 32px auto;
+      background: #fff;
+      border-radius: 8px;
+      padding: 24px 32px 32px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    h1 {
+      margin-top: 0;
+      margin-bottom: 16px;
+    }
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      font-size: 14px;
+    }
+    select {
+      padding: 4px 8px;
+    }
+    #chat-box {
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 12px;
+      height: 360px;
+      overflow-y: auto;
+      margin-bottom: 12px;
+      background: #fafafa;
+      font-size: 14px;
+    }
+    .msg {
+      margin-bottom: 8px;
+    }
+    .msg.user {
+      text-align: right;
+    }
+    .msg.user span.role {
+      color: #2563eb;
+    }
+    .msg.assistant span.role {
+      color: #0f766e;
+    }
+    .msg span.role {
+      font-weight: 600;
+      margin-right: 4px;
+    }
+    textarea {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 10px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      resize: vertical;
+      min-height: 60px;
+      max-height: 140px;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+    button {
+      padding: 8px 14px;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    #send-btn {
+      background: #2563eb;
+      color: #fff;
+    }
+    #report-btn {
+      background: #f97316;
+      color: #fff;
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+    #status {
+      margin-top: 8px;
+      font-size: 13px;
+      min-height: 18px;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>NIS 使用者客服</h1>
+
+    <div class="toolbar">
+      <span>院區：</span>
+      <!-- 🔸 value 改成「萬芳醫院」，要跟 hospitals.HOSPITAL_NAME 一致 -->
+      <select id="hospital-select">
+        <option value="萬芳醫院">萬芳醫院</option>
+      </select>
+
+      <span style="margin-left:auto;"><a href="/admin">前往管理者登入</a></span>
+    </div>
+
+    <div id="chat-box"></div>
+
+    <textarea id="input-text" placeholder="請輸入想詢問的內容…"></textarea>
+
+    <div class="btn-row">
+      <button id="report-btn" disabled>我要通報 Issue</button>
+      <button id="send-btn">送出</button>
+    </div>
+
+    <div id="status"></div>
+  </div>
+
+  <script>
+    const chatBox = document.getElementById("chat-box");
+    const inputText = document.getElementById("input-text");
+    const sendBtn = document.getElementById("send-btn");
+    const reportBtn = document.getElementById("report-btn");
+    const statusEl = document.getElementById("status");
+    const hospitalSelect = document.getElementById("hospital-select");
+
+    // 儲存整段對話（會送給後端 / 作為通報內容）
+    let messages = [];
+
+    function renderChat() {
+      chatBox.innerHTML = "";
+      for (const m of messages) {
+        const div = document.createElement("div");
+        div.classList.add("msg", m.role);
+        const roleText = m.role === "user" ? "使用者" : "NIS 小幫手";
+        div.innerHTML = `<span class="role">${roleText}：</span><span>${m.content}</span>`;
+        chatBox.appendChild(div);
+      }
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    async function sendMessage() {
+      const text = inputText.value.trim();
+      if (!text) return;
+
+      // 這邊先用簡短代碼給 RAG，用不到院區中文名稱
+      const hospital = hospitalSelect.value;
+
+      // 清除狀態
+      statusEl.textContent = "";
+
+      // 先把使用者訊息放進 messages
+      messages.push({ role: "user", content: text });
+      inputText.value = "";
+      renderChat();
+
+      sendBtn.disabled = true;
+      reportBtn.disabled = true;
+      sendBtn.textContent = "傳送中…";
+
+      try {
+        const resp = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            hospital,  // 後端的 RAG 用這個欄位
+            messages,
+          }),
+        });
+
+        if (!resp.ok) {
+          throw new Error("HTTP 狀態碼 " + resp.status);
+        }
+        const data = await resp.json();
+
+        // 後端會回傳完整 messages 陣列
+        messages = data.messages || [];
+        renderChat();
+
+        // 只要有至少一則訊息，就允許通報
+        if (messages.length > 0) {
+          reportBtn.disabled = false;
+        }
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = "系統錯誤，請稍後再試。";
+      } finally {
+        sendBtn.disabled = false;
+        sendBtn.textContent = "送出";
+      }
+    }
+
+    // 🔸 通報 Issue：改成送 { hospital, title, description }
+    async function reportIssue() {
+      if (messages.length === 0) return;
+
+      // 給 /api/report_issue 用的「院區名稱」
+      const hospitalName = hospitalSelect.options[hospitalSelect.selectedIndex].text;
+
+      statusEl.textContent = "";
+      reportBtn.disabled = true;
+      reportBtn.textContent = "通報中…";
+
+      // 先用簡單規則產生標題 / 描述：
+      // - 標題：最後一則使用者訊息前 30 個字 +「（使用者通報）」 
+      // - 描述：把所有使用者訊息串成一段
+      const userMessages = messages.filter(m => m.role === "user");
+      const lastUserContent = userMessages.length
+        ? userMessages[userMessages.length - 1].content
+        : "NIS 使用問題通報";
+
+      const title = (lastUserContent.length > 30
+        ? lastUserContent.slice(0, 30) + "…"
+        : lastUserContent) + "（使用者通報）";
+
+      const description = "以下為使用者與系統的對話摘要：\n\n" +
+        userMessages.map((m, idx) => `【使用者第 ${idx + 1} 次提問】${m.content}`).join("\n");
+
+      try {
+        const resp = await fetch("/api/report_issue", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            hospital: hospitalName,  // 這個會對應到 hospitals.HOSPITAL_NAME
+            title,
+            description,
+          }),
+        });
+
+        if (!resp.ok) {
+          throw new Error("HTTP 狀態碼 " + resp.status);
+        }
+        const data = await resp.json();
+
+        if (data.success) {
+          statusEl.textContent = `✅ 已通報 Issue（編號：${data.issue_id ?? "未回傳"}）。管理者後台可查看。`;
+        } else {
+          statusEl.textContent = `❌ 通報失敗：${data.message}`;
+          reportBtn.disabled = false;
+        }
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = "系統錯誤，通報失敗。";
+        reportBtn.disabled = false;
+      } finally {
+        reportBtn.textContent = "我要通報 Issue";
+      }
+    }
+
+    sendBtn.addEventListener("click", sendMessage);
+    inputText.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    reportBtn.addEventListener("click", reportIssue);
+  </script>
+</body>
+</html>

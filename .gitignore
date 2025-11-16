@@ -1,0 +1,14 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# env
+.env
+.env.*
+
+# VS Code
+.vscode/
+
+# FAISS / 資料
+data/vectorstore/

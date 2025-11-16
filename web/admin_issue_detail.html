@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <title>Issue 詳細資料</title>
+  <!-- 共用樣式：跟列表頁一樣 -->
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>Issue 詳細資料</h1>
+    <p>Issue ID：<span id="issue-id">（載入中）</span></p>
+
+    <!-- 基本資訊卡片 -->
+    <section class="card">
+      <h2>▎基本資訊</h2>
+      <p>標題：<span id="title-text"></span></p>
+      <p>院區：<span id="hospital-text"></span></p>
+      <p>分類：<span id="category-text"></span></p>
+      <p>狀態：<span id="status-text"></span></p>
+      <p>優先權：<span id="priority-text"></span></p>
+      <p>負責人：<span id="assignee-text"></span></p>
+      <p>建立時間：<span id="created-at-text"></span></p>
+      <p>最後更新：<span id="updated-at-text"></span></p>
+    </section>
+
+    <!-- Issue 描述 -->
+    <section class="card">
+      <h2>▎Issue 描述</h2>
+      <p id="description-text">（尚未載入描述）</p>
+    </section>
+
+    <!-- 相關對話紀錄（之後可以真的接 convo） -->
+    <section class="card">
+      <h2>▎相關對話紀錄</h2>
+      <p>目前沒有相關對話紀錄。</p>
+    </section>
+
+    <!-- 處理歷程（Issue History） -->
+    <section class="card">
+      <h2>▎處理歷程（Issue History）</h2>
+      <p>目前沒有任何處理歷程。</p>
+    </section>
+
+    <p>
+      <a href="/admin/issues">回到 Issue 列表</a> ｜ <a href="/admin">回到登入頁</a>
+    </p>
+
+    <p id="error-msg" class="error" style="display:none;"></p>
+  </div>
+
+  <script>
+    // 從網址 /admin/issues/2 這種格式抓出最後的 issue_id
+    function getIssueIdFromUrl() {
+      const parts = window.location.pathname.split("/");
+      const last = parts[parts.length - 1];
+      const id = parseInt(last, 10);
+      return Number.isNaN(id) ? null : id;
+    }
+
+    async function loadIssueDetail() {
+      const issueId = getIssueIdFromUrl();
+      const spanId = document.getElementById("issue-id");
+      const errEl = document.getElementById("error-msg");
+
+      if (!issueId) {
+        spanId.textContent = "（網址沒有 Issue ID）";
+        errEl.style.display = "block";
+        errEl.textContent = "載入失敗：網址沒有 Issue ID。";
+        return;
+      }
+
+      spanId.textContent = issueId;
+
+      try {
+        // 呼叫後端 /api/admin/issues/{issue_id}
+        const resp = await fetch(`/api/admin/issues/${issueId}`);
+        if (!resp.ok) {
+          errEl.style.display = "block";
+          errEl.textContent = `載入失敗：HTTP ${resp.status}`;
+          return;
+        }
+
+        const data = await resp.json();
+        const issue = data.issue;
+
+        // 填入畫面上的欄位
+        document.getElementById("title-text").textContent       = issue.title || "";
+        document.getElementById("hospital-text").textContent    = issue.hospital_name || "";
+        document.getElementById("category-text").textContent    = issue.category_name || "";
+        document.getElementById("status-text").textContent      = issue.status_code || "";
+        document.getElementById("priority-text").textContent    = issue.priority_code || "";
+        document.getElementById("assignee-text").textContent    = issue.assignee_name || "";
+        document.getElementById("created-at-text").textContent  = issue.created_at || "";
+        document.getElementById("updated-at-text").textContent  = issue.updated_at || "";
+        document.getElementById("description-text").textContent =
+          issue.description || "（尚未撰寫描述）";
+      } catch (err) {
+        console.error(err);
+        errEl.style.display = "block";
+        errEl.textContent = "載入失敗，請稍後再試。";
+      }
+    }
+
+    // 頁面載入時就撈一次
+    loadIssueDetail();
+  </script>
+</body>
+</html>

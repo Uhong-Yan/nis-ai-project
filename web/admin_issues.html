@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <title>NIS Issue Tracking</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    /* 如果還沒有 style.css 也沒關係，這裡先放一點基本樣式 */
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        sans-serif;
+      background: #f5f5f5;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 960px;
+      margin: 24px auto;
+      background: #fff;
+      border-radius: 8px;
+      padding: 24px 32px 32px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    h1 {
+      margin-top: 0;
+      margin-bottom: 16px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px 10px;
+      font-size: 14px;
+    }
+    th {
+      background: #f3f4f6;
+      text-align: left;
+    }
+    tr.data-row {
+      cursor: pointer;        /* 滑過去變成可點 */
+    }
+    tr.data-row:hover {
+      background: #eff6ff;    /* hover 高亮 */
+    }
+    #btn-refresh {
+      margin-top: 8px;
+      padding: 6px 12px;
+    }
+    .links {
+      margin-top: 16px;
+      font-size: 14px;
+    }
+    .links a {
+      color: #2563eb;
+      text-decoration: none;
+      margin-right: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>NIS Issue Tracking（管理者後台）</h1>
+
+    <p>
+      目前登入帳號：
+      <span id="current-user">讀取中…</span>
+    </p>
+
+    <button id="btn-refresh">重新載入列表</button>
+
+    <table id="issue-table">
+      <thead>
+        <tr>
+          <th>Issue ID</th>
+          <th>院區</th>
+          <th>分類</th>
+          <th>標題</th>
+          <th>狀態</th>
+          <th>優先權</th>
+          <th>建立時間</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- 由 JS 動態插入 -->
+      </tbody>
+    </table>
+
+    <div class="links">
+      <a href="/admin">回到登入頁</a>
+      ｜ 
+      <a href="/user">回到使用者聊天頁</a>
+    </div>
+  </div>
+
+  <script>
+    // ===== 顯示目前登入者（從 localStorage 讀取） =====
+    (function showCurrentUser() {
+      const span = document.getElementById("current-user");
+      const storedName = localStorage.getItem("admin_display_name");
+      const storedUser = localStorage.getItem("admin_username");
+
+      if (storedName && storedUser) {
+        span.textContent = `${storedName}（帳號：${storedUser}）`;
+      } else if (storedUser) {
+        span.textContent = storedUser;
+      } else {
+        span.textContent = "未登入";
+      }
+    })();
+
+    // ===== 載入 Issue 列表 =====
+    async function loadIssues() {
+      const tbody = document.querySelector("#issue-table tbody");
+      tbody.innerHTML = "<tr><td colspan='7'>載入中...</td></tr>";
+
+      try {
+        const resp = await fetch("/api/admin/issues");
+        if (!resp.ok) {
+          tbody.innerHTML = `<tr><td colspan="7">載入失敗：HTTP ${resp.status}</td></tr>`;
+          return;
+        }
+
+        const data = await resp.json();
+        const items = data.items || [];
+
+        if (items.length === 0) {
+          tbody.innerHTML = "<tr><td colspan='7'>目前沒有任何 Issue</td></tr>";
+          return;
+        }
+
+        tbody.innerHTML = "";
+        for (const row of items) {
+          const tr = document.createElement("tr");
+          tr.classList.add("data-row");
+
+          // 點整列 → 導向詳細頁（注意 URL 格式）
+          tr.addEventListener("click", () => {
+            window.location.href = `/admin/issues/${row.issue_id}`;
+          });
+
+          tr.innerHTML = `
+            <td>${row.issue_id}</td>
+            <td>${row.hospital_name || ""}</td>
+            <td>${row.category_name || ""}</td>
+            <td>${row.title}</td>
+            <td>${row.status_code || ""}</td>
+            <td>${row.priority_code || ""}</td>
+            <td>${row.created_at}</td>
+          `;
+          tbody.appendChild(tr);
+        }
+      } catch (err) {
+        console.error(err);
+        tbody.innerHTML = "<tr><td colspan='7'>發生錯誤，請稍後再試</td></tr>";
+      }
+    }
+
+    document.getElementById("btn-refresh").addEventListener("click", loadIssues);
+
+    // 頁面載入時自動撈一次
+    loadIssues();
+  </script>
+</body>
+</html>

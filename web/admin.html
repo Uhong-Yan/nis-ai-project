@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>NIS 管理者登入</title>
+  <!-- 之後如果有 style.css 就放在 web/style.css，再把這行打開 -->
+  <!-- <link rel="stylesheet" href="/static/style.css" /> -->
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        sans-serif;
+      background: #f5f5f5;
+      margin: 0;
+      padding: 0;
+    }
+    .page {
+      max-width: 480px;
+      margin: 40px auto;
+      background: #fff;
+      border-radius: 8px;
+      padding: 24px 32px 32px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    h1 {
+      margin-top: 0;
+      margin-bottom: 24px;
+    }
+    label {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 14px;
+    }
+    input[type="text"],
+    input[type="password"] {
+      width: 100%;
+      padding: 8px 10px;
+      margin-bottom: 16px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+    }
+    button {
+      width: 100%;
+      padding: 10px 0;
+      border: none;
+      border-radius: 4px;
+      background: #2563eb;
+      color: white;
+      font-size: 15px;
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: 0.7;
+      cursor: default;
+    }
+    .msg {
+      margin-top: 12px;
+      font-size: 14px;
+      min-height: 20px;
+    }
+    .msg.error {
+      color: #dc2626;
+    }
+    .msg.success {
+      color: #16a34a;
+    }
+    .back-link {
+      margin-top: 16px;
+      text-align: center;
+      font-size: 14px;
+    }
+    .back-link a {
+      color: #2563eb;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>NIS 管理者登入</h1>
+
+    <label for="username">帳號</label>
+    <input id="username" type="text" placeholder="例如：admin01" />
+
+    <label for="password">密碼</label>
+    <input id="password" type="password" placeholder="請輸入密碼" />
+
+    <button id="login-btn">登入</button>
+
+    <div id="msg" class="msg"></div>
+
+    <div class="back-link">
+      <!-- 回首頁要改成 "/"，不要用 /index.html -->
+      <a href="/">返回首頁</a>
+    </div>
+  </div>
+
+  <script>
+    const btn = document.getElementById("login-btn");
+    const msgEl = document.getElementById("msg");
+
+    btn.addEventListener("click", async () => {
+      const username = document.getElementById("username").value.trim();
+      const password = document.getElementById("password").value.trim();
+
+      msgEl.textContent = "";
+      msgEl.className = "msg";
+
+      if (!username || !password) {
+        msgEl.textContent = "請輸入帳號與密碼。";
+        msgEl.classList.add("error");
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = "登入中…";
+
+      try {
+        const resp = await fetch("/api/admin/login", {   // 一定要是 /api/admin/login
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+        });
+
+        if (!resp.ok) {
+          throw new Error("HTTP 狀態碼 " + resp.status);
+        }
+
+        const data = await resp.json();
+
+        if (data.success) {
+          // 把登入資訊存進 localStorage，給 admin_issues.html 顯示用
+          const displayNameMap = {
+            admin01: "閻宇虹",
+            admin02: "周映妤",
+            admin03: "沈霈沂",
+          };
+          const displayName = displayNameMap[username] || username;
+
+          localStorage.setItem("admin_username", username);
+          localStorage.setItem("admin_display_name", displayName);
+
+          msgEl.textContent = "登入成功，正在導向 Issue Tracking 介面...";
+          msgEl.classList.add("success");
+
+          // 1 秒後導向 Issue 管理畫面
+          setTimeout(() => {
+            window.location.href = "/admin/issues";
+          }, 1000);
+        } else {
+          msgEl.textContent = data.message || "帳號或密碼錯誤。";
+          msgEl.classList.add("error");
+        }
+      } catch (err) {
+        console.error(err);
+        msgEl.textContent = "系統錯誤，請稍後再試。";
+        msgEl.classList.add("error");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "登入";
+      }
+    });
+  </script>
+</body>
+</html>
